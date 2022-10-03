@@ -1,9 +1,7 @@
-
 namespace Public.Api.Address.BackOffice
 {
     using System.Threading;
     using System.Threading.Tasks;
-    using AddressRegistry.Api.BackOffice.Abstractions.Requests;
     using Be.Vlaanderen.Basisregisters.Api.Exceptions;
     using Common.Infrastructure;
     using Infrastructure;
@@ -13,23 +11,21 @@ namespace Public.Api.Address.BackOffice
     using RestSharp;
     using AddressRegistry.Api.Legacy.Address.Responses;
     using Infrastructure.Swagger;
-    using Newtonsoft.Json;
     using Swashbuckle.AspNetCore.Annotations;
     using Swashbuckle.AspNetCore.Filters;
     using ProblemDetails = Be.Vlaanderen.Basisregisters.BasicApiProblem.ProblemDetails;
 
     public partial class AddressBackOfficeController
     {
-        public const string ChangePostalCodeRoute = "adressen/{objectId}/acties/wijzigen/postcode";
+        public const string CorrectRejectionRoute = "adressen/{objectId}/acties/corrigeren/afkeuring";
 
         /// <summary>
-        /// Wijzig de postcode van een adres.
+        /// Regulariseer een adres.
         /// </summary>
         /// <param name="objectId">Identificator van het adres.</param>
-        /// <param name="addressChangePostalCodeRequest"></param>
         /// <param name="actionContextAccessor"></param>
         /// <param name="problemDetailsHelper"></param>
-        /// <param name="changePostalCodeAddressToggle"></param>
+        /// <param name="featureToggle"></param>
         /// <param name="ifMatch">If-Match header met ETag van de laatst gekende versie van het adres (optioneel).</param>
         /// <param name="cancellationToken"></param>
         /// <response code="202">Als het ticket succesvol is aangemaakt.</response>
@@ -40,7 +36,7 @@ namespace Public.Api.Address.BackOffice
         /// <response code="429">Als het aantal requests per seconde de limiet overschreven heeft.</response>
         /// <response code="500">Als er een interne fout is opgetreden.</response>
         /// <returns></returns>
-        [ApiOrder(ApiOrder.Address.Edit + 14)]
+        [ApiOrder(ApiOrder.Address.Edit + 12)]
         [ProducesResponseType(StatusCodes.Status202Accepted)]
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -56,19 +52,17 @@ namespace Public.Api.Address.BackOffice
         [SwaggerResponseExample(StatusCodes.Status412PreconditionFailed, typeof(PreconditionFailedResponseExamples))]
         [SwaggerResponseExample(StatusCodes.Status429TooManyRequests, typeof(TooManyRequestsResponseExamples))]
         [SwaggerResponseExample(StatusCodes.Status500InternalServerError, typeof(InternalServerErrorResponseExamples))]
-        [SwaggerRequestExample(typeof(AddressChangePositionRequest), typeof(AddressChangePositionRequestExamples))]
-        [SwaggerOperation(Description = "Wijzig de postinfoId van een adres.")]
-        [HttpPost(ChangePostalCodeRoute, Name = nameof(ChangePostalCodeAddress))]
-        public async Task<IActionResult> ChangePostalCodeAddress(
+        [SwaggerOperation(Description = "Wijzig officieelToegekend van `false` naar `true`.")]
+        [HttpPost(CorrectRejectionRoute, Name = nameof(CorrectRejection))]
+        public async Task<IActionResult> CorrectRejection(
             [FromRoute] int objectId,
-            [FromBody] AddressChangePostalCodeRequest addressChangePostalCodeRequest,
             [FromServices] IActionContextAccessor actionContextAccessor,
             [FromServices] ProblemDetailsHelper problemDetailsHelper,
-            [FromServices] ChangePostalCodeAddress changePostalCodeAddressToggle,
+            [FromServices] CorrectRejectionAddressToggle featureToggle,
             [FromHeader(Name = HeaderNames.IfMatch)] string? ifMatch,
             CancellationToken cancellationToken = default)
         {
-            if (!changePostalCodeAddressToggle.FeatureEnabled)
+            if (!featureToggle.FeatureEnabled)
             {
                 return NotFound();
             }
@@ -77,15 +71,8 @@ namespace Public.Api.Address.BackOffice
 
             IRestRequest BackendRequest()
             {
-                var request = new RestRequest(ChangePostalCodeRoute, Method.POST)
-                    .AddParameter(
-                        "application/json; charset=utf-8",
-                        JsonConvert.SerializeObject(addressChangePostalCodeRequest),
-                        ParameterType.RequestBody)
-                    .AddParameter(
-                        "objectId",
-                        objectId,
-                        ParameterType.UrlSegment);
+                var request = new RestRequest(CorrectRejectionRoute, Method.POST);
+                request.AddParameter("objectId", objectId, ParameterType.UrlSegment);
 
                 if (ifMatch is not null)
                 {
